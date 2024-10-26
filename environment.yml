@@ -1,4 +1,4 @@
-name: data_UNIBREMEN
+name: data_UniBremen
 channels:
   - conda-forge
   - defaults
@@ -269,4 +269,4 @@ dependencies:
   - zlib=1.2.13=h4b97444_1
   - zstandard=0.23.0=py312h5bcdf72_0
   - zstd=1.5.6=h138b38a_0
-prefix: /opt/anaconda3/envs/data_UNIBREMEN
+prefix: /opt/anaconda3/envs/data_UniBremen
