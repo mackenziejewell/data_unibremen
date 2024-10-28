@@ -65,8 +65,15 @@ Latest recorded update:
     return projection
 
 
-def name_SIC_file(date, res, hem):
+def name_SIC_file(date, res: str, hem: str, include_url: bool = True):
 
+    """Construct filename for Uni Bremen AMSR2-AMSRE sea ice concentration data (doi: 10.1029/2005JC003384)
+    INPUT: 
+    - date: datetime object for desired file
+    - res: str, resolution of desired file ('3125, '6250', '12500', '25000')
+    - hem: str, hemisphere of desired file ('n', 's')
+    - include_url: whether to include remote url in filename (True) or file name only (False)
+    """
     group = hem+res
 
     dataset_path = 'https://data.seaice.uni-bremen.de/'
@@ -79,7 +86,10 @@ def name_SIC_file(date, res, hem):
         file_strftime = f'amsre/asi_daygrid_swath/{group}/netcdf/%Y/asi-n6250-%Y%m%d-v5.4.nc'
 
     # construct filename
-    file = dataset_path + date.strftime(file_strftime)
+    if include_url:
+        file = dataset_path + date.strftime(file_strftime)
+    else:
+        file = date.strftime(file_strftime).split('/')[-1]
 
     return file
 
@@ -170,6 +180,119 @@ Latest recorded update:
         os.remove("tmp_coord.hdf")
 
 
+
+    # remove units if desired
+    if not include_units:
+        for key in data.keys():
+            if key not in ['proj', 'ds']:
+                data[key] = data[key].magnitude
+
+
+
+    return data
+
+
+
+
+def open_local_file(date, res : str='6250', hem : str='n', 
+                    main_path : str = '/Volumes/Seagate_Jewell/KenzieStuff/',
+                     coordinates: bool = False,
+                     area: bool = False,
+                     include_units = False, quiet = True,):
+    
+    """Use xarray to open locally stored SIC files from UniBremen (https://data.seaice.uni-bremen.de/)
+
+    Assumes following directory structure:
+
+    main_path/
+    ├── UniB-ASI-SIC-{res}{hem}/
+    |   ├── LongitudeLatitudeGrid-{hem}{res}-Arctic.nc
+    |   ├── PolStereo_GridCellArea_{hem}{res}_Arctic.nc
+    |   |
+    │   ├── asi-AMSR2-{hem}{res}-{date.year}/
+    │       ├── asi-AMSR2-{hem}{res}-{date}-v5.4.nc
+
+
+INPUT: 
+- date: datetime object for desired file
+- res: str, resolution of desired file ('6250' or '3125')
+- hem: str, hemisphere of desired file ('n' or 's')
+- main_path: str, directory where files are locally stored 
+    - looks for subfolder named UniB-ASI-SIC-{}{} where {} will be replaced with res and hem
+- coordinates: bool, whether or not to download lat/lon coordinate data
+- area: bool, whether or not to download cell area data
+- include_units: bool, whether or not to return data with units
+- quiet: bool, whether or not to supress print statements
+
+OUTPUT:
+- data: dictionary with nc data
+
+Latest recorded update:
+10-25-2024
+    """
+    # construct filename
+    filename = name_SIC_file(date, res, hem, include_url = False)
+
+    # construct path
+    path = main_path + f'UniB-ASI-SIC-{hem}{res}/'
+
+    # determine platform for annual subfolder
+    Y = date.year
+    if Y <= 2011:
+        annual_folder = f'asi-AMSRE-{hem}{res}-{Y}/'
+    else:
+        annual_folder = f'asi-AMSR2-{hem}{res}-{Y}/'
+
+    # search for file
+    file = path+annual_folder+filename
+
+    if os.path.isfile(path+annual_folder+filename):
+        file = path+annual_folder+filename
+    else:
+        if not quiet:
+            print(f'>>> {filename} not found in {path+annual_folder}')
+
+    if not quiet:
+        print(f'>>> opening {file}')
+
+    # open data set
+    ds = xr.open_dataset(file)
+        
+    # Extract variables from dataset
+    data = extract_variables(ds)
+
+    # download cell area file
+    #------------------------------
+    if area:
+
+        # cell area file
+        area_file = name_area_file(res, hem, include_url=False)
+
+        # check if local area file exists
+        if not os.path.isfile(path+area_file):
+            print(f'>>> {area_file} not found in {path}')
+
+        else:     
+            # open local area file
+            ds_area = xr.open_dataset(path + area_file)
+            data['area'] = ds_area['data'].values * units('km^2')
+
+    # download cell coordinate file
+    #------------------------------
+    if coordinates:
+
+        # cell coordinate (lat/lon) file
+        coord_file = name_coordinate_file(res, hem, include_url=False)
+
+        # check if local coord file exists
+        if not os.path.isfile(path+coord_file):
+            print(f'>>> {coord_file} not found in {path}')
+
+        else:
+            # extract lon/lat from coordinate file
+            lon, lat = open_coord_file(path+coord_file)
+            data['lon'] = lon * units('degreeE')
+            data['lat'] = lat * units('degreeN')
 
     # remove units if desired
     if not include_units:

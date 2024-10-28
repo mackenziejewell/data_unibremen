@@ -3,12 +3,13 @@
 from pyhdf.SD  import *
 from metpy.units import units
 
-def name_area_file(res: str, hem: str):
+def name_area_file(res: str, hem: str, include_url: bool = True):
 
     """Generate the name of the cell area file for a given resolution and hemisphere.
     INPUT:
     - res: str, resolution of desired file ('3125, '6250', '12500', '25000')
     - hem: str, hemisphere of desired file ('n', 's')
+    - include_url: whether to include remote url in filename (True) or file name only (False)
     OUTPUT:
     - file: str, url path to coordinate file"""
 
@@ -16,17 +17,22 @@ def name_area_file(res: str, hem: str):
 
     # convert to km
     resstr = str(float(res)*units('m').to('km').magnitude)
-    file = area_path + f'PolStereo_GridCellArea_{hem}{resstr}km_Arctic.nc'
+
+    if include_url:
+        file = area_path + f'PolStereo_GridCellArea_{hem}{resstr}km_Arctic.nc'
+    else:
+        file = f'PolStereo_GridCellArea_{hem}{resstr}km_Arctic.nc'
     
     return file
     
     
-def name_coordinate_file(res: str, hem: str):
+def name_coordinate_file(res: str, hem: str, include_url: bool = True):
 
     """Generate the name of the coordinate file for a given resolution and hemisphere.
     INPUT:
     - res: str, resolution of desired file ('3125, '6250', '12500', '25000')
     - hem: str, hemisphere of desired file ('n', 's')
+    - include_url: whether to include remote url in filename (True) or file name only (False)
     OUTPUT:
     - file: str, url path to coordinate file"""
 
@@ -49,7 +55,10 @@ def name_coordinate_file(res: str, hem: str):
     else:
         coord_file = f'LongitudeLatitudeGrid-{group}-{region}.hdf'
 
-    file = filepath + coord_file
+    if include_url:
+        file = filepath + coord_file
+    else:
+        file = coord_file
 
     return file
 
