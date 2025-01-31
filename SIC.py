@@ -64,7 +64,6 @@ Latest recorded update:
 
     return projection
 
-
 def name_SIC_file(date, res: str, hem: str, include_url: bool = True):
 
     """Construct filename for Uni Bremen AMSR2-AMSRE sea ice concentration data (doi: 10.1029/2005JC003384)
@@ -94,11 +93,13 @@ def name_SIC_file(date, res: str, hem: str, include_url: bool = True):
     return file
 
 
-def open_remote_file(date, res : str='6250', hem : str='n', 
-                     method : str = 'xarray', 
-                     coordinates: bool = False,
-                     area: bool = False,
-                     include_units = False, quiet = True):
+def open_remote_file(date, res ='6250', hem ='n', 
+                     method = 'xarray', 
+                     crop = [0, None, 0, None],
+                     coordinates = False,
+                     area = False,
+                     include_units = False, 
+                     quiet = True):
     
     """Use xarray to open remote files from HTTPS server:
     https://data.seaice.uni-bremen.de/
@@ -110,6 +111,7 @@ INPUT:
 - method: str, method to attempt to laod data 
     ('xarray' for reading into memory only, sometimes has trouble
     'urllib' to temporarily download file to disk and then read with xarray)
+- crop: indices along dim1 ("i"), dim2 ("j") to crop to area of interest [ai, bi, aj, bj]
 - coordinates: bool, whether or not to download lat/lon coordinate data
 - area: bool, whether or not to download cell area data
 - include_units: bool, whether or not to return data with units
@@ -119,7 +121,7 @@ OUTPUT:
 - data: dictionary with nc data
 
 Latest recorded update:
-10-25-2024
+01-31-2025
     """
     # construct filename
     file = name_SIC_file(date, res, hem)
@@ -148,6 +150,14 @@ Latest recorded update:
         # remove temporary file
         os.remove("temp.nc")
 
+    # crop data values here (and others below)
+    ai, bi, aj, bj = crop[0], crop[1], crop[2], crop[3]
+    data['y'] = data['y'][ai:bi]
+    data['x'] = data['x'][aj:bj]
+    data['xx'] = data['xx'][ai:bi, aj:bj]
+    data['yy'] = data['yy'][ai:bi, aj:bj]
+    data['sic'] = data['sic'][ai:bi, aj:bj]
+
     # download cell area file
     #------------------------------
     if area:
@@ -160,7 +170,7 @@ Latest recorded update:
 
         # open area file
         ds_area = xr.open_dataset('tmp_area.nc')
-        data['area'] = ds_area['data'].values * units('km^2')
+        data['area'] = ds_area['data'].values[ai:bi, aj:bj] * units('km^2')
         os.remove("tmp_area.nc")
 
     # download cell coordinate file
@@ -175,8 +185,8 @@ Latest recorded update:
 
         # extract lon/lat from coordinate file
         lon, lat = open_coord_file('tmp_coord.hdf')
-        data['lon'] = lon * units('degreeE')
-        data['lat'] = lat * units('degreeN')
+        data['lon'] = lon[ai:bi, aj:bj] * units('degreeE')
+        data['lat'] = lat[ai:bi, aj:bj] * units('degreeN')
         os.remove("tmp_coord.hdf")
 
 
@@ -194,10 +204,10 @@ Latest recorded update:
 
 
 
-def open_local_file(date, res : str='6250', hem : str='n', 
-                    main_path : str = '/Volumes/Seagate_Jewell/KenzieStuff/',
-                     coordinates: bool = False,
-                     area: bool = False,
+def open_local_file(date, res = '6250', hem ='n', 
+                    main_path = '/Volumes/Seagate_Jewell/KenzieStuff/',
+                    crop = [0, None, 0, None],
+                     coordinates = False, area = False,
                      include_units = False, quiet = True,):
     
     """Use xarray to open locally stored SIC files from UniBremen (https://data.seaice.uni-bremen.de/)
@@ -219,6 +229,7 @@ INPUT:
 - hem: str, hemisphere of desired file ('n' or 's')
 - main_path: str, directory where files are locally stored 
     - looks for subfolder named UniB-ASI-SIC-{}{} where {} will be replaced with res and hem
+- crop: indices along dim1 ("i"), dim2 ("j") to crop to area of interest [ai, bi, aj, bj]
 - coordinates: bool, whether or not to download lat/lon coordinate data
 - area: bool, whether or not to download cell area data
 - include_units: bool, whether or not to return data with units
@@ -228,8 +239,9 @@ OUTPUT:
 - data: dictionary with nc data
 
 Latest recorded update:
-10-25-2024
+01-31-2025
     """
+
     # construct filename
     filename = name_SIC_file(date, res, hem, include_url = False)
 
@@ -261,6 +273,15 @@ Latest recorded update:
     # Extract variables from dataset
     data = extract_variables(ds)
 
+    # crop data values here (and others below)
+    ai, bi, aj, bj = crop[0], crop[1], crop[2], crop[3]
+    data['y'] = data['y'][ai:bi]
+    data['x'] = data['x'][aj:bj]
+    data['xx'] = data['xx'][ai:bi, aj:bj]
+    data['yy'] = data['yy'][ai:bi, aj:bj]
+    data['sic'] = data['sic'][ai:bi, aj:bj]
+
+
     # download cell area file
     #------------------------------
     if area:
@@ -275,7 +296,7 @@ Latest recorded update:
         else:     
             # open local area file
             ds_area = xr.open_dataset(path + area_file)
-            data['area'] = ds_area['data'].values * units('km^2')
+            data['area'] = ds_area['data'].values[ai:bi, aj:bj] * units('km^2')
 
     # download cell coordinate file
     #------------------------------
@@ -291,8 +312,8 @@ Latest recorded update:
         else:
             # extract lon/lat from coordinate file
             lon, lat = open_coord_file(path+coord_file)
-            data['lon'] = lon * units('degreeE')
-            data['lat'] = lat * units('degreeN')
+            data['lon'] = lon[ai:bi, aj:bj] * units('degreeE')
+            data['lat'] = lat[ai:bi, aj:bj] * units('degreeN')
 
     # remove units if desired
     if not include_units:
@@ -301,5 +322,112 @@ Latest recorded update:
                 data[key] = data[key].magnitude
 
 
+
+    return data
+
+
+
+def calc_meansic_openfreq(dates, crop = [0,None,0,None], open_thresh = 70,
+                  res = '6250', hem ='n', 
+                  main_path = '/Volumes/Seagate_Jewell/KenzieStuff/',
+                  coordinates = False, area = False, quiet=True):
+    
+    """Use xarray to calculate mean open frequency and sic across dates.
+     So far only applies to locally stored SIC files from UniBremen (https://data.seaice.uni-bremen.de/)
+
+INPUT: 
+- date: datetime object for desired file
+- crop: indices along dim1 ("a"), dim2 ("b") to crop to area of interest [ai, aj, bi, bj]
+    default is no cropping
+- open_thresh: threshold to indicate open water (default: 70%)
+- res: str, resolution of desired file ('6250' or '3125')
+- hem: str, hemisphere of desired file ('n' or 's')
+- main_path: str, directory where files are locally stored 
+    - looks for subfolder named UniB-ASI-SIC-{}{} where {} will be replaced with res and hem
+- coordinates: bool, whether or not to download lat/lon coordinate data
+- area: bool, whether or not to download cell area data
+- quiet: bool, whether or not to supress print statements
+
+OUTPUT:
+- data: dictionary with coordinates (if desired), mean sic and open frequency across dates, and missing dates
+
+Latest recorded update:
+01-30-2025
+    """
+
+    # extract cropping info
+    ai, aj = crop[0], crop[1]
+    bi, bj = crop[2], crop[3]
+
+
+    # dictionary to store data
+    data = {}
+
+    counter = 0 # counts any files that have opened
+    missing_dates = np.array([])
+    
+    for date in dates:
+
+        # open local sic file
+        try:
+            sic = open_local_file(date, res = res, hem = hem,
+                                         main_path = main_path,
+                                         coordinates = coordinates, area = area, 
+                                         include_units=False)
+            exists = True
+            counter+=1
+
+        except:
+            exists = False
+
+            # record missing dates
+            missing_dates = np.append(missing_dates, date)
+
+        if counter == 1:
+            
+            # mean
+            #-------------------------------------------------
+            sic_sum = np.zeros(sic['sic'][ai:aj, bi:bj].shape)
+            open_sum = np.zeros(sic['sic'][ai:aj, bi:bj].shape)
+            non_nan = np.zeros(sic['sic'][ai:aj, bi:bj].shape)
+
+            # add coordinates or cell areas if desired
+            data['xx'] = sic['xx'][ai:aj, bi:bj]
+            data['yy'] = sic['yy'][ai:aj, bi:bj]
+
+            # add coordinates or cell areas if desired
+            if coordinates:
+                data['lon'] = sic['lon'][ai:aj, bi:bj]
+                data['lat'] = sic['lat'][ai:aj, bi:bj]
+            if area:
+                data['area'] = sic['area'][ai:aj, bi:bj]
+            
+        if exists:
+
+            sic_data = np.copy(sic['sic'][ai:aj, bi:bj])
+
+            # record non-nan values, then replace nans with zeros
+            non_nan += np.isfinite(sic_data).astype(int)
+            sic_data[np.isnan(sic_data)] = 0
+            sic_sum += sic_data
+            open_sum += (sic_data < open_thresh).astype(int)
+
+        # record progress
+        if not quiet:
+            if counter%100 == 0:
+
+                print(f'[{counter}/{len(dates)}] {date}')
+
+    non_nan[non_nan == 0] = 9999
+
+    sic_mean = sic_sum/non_nan
+    open_freq = open_sum/non_nan
+
+    sic_mean[non_nan == 9999] = np.nan
+    open_freq[non_nan == 9999] = np.nan
+    
+    data['sic_mean'] = sic_mean
+    data['open_freq'] = open_freq
+    data['missing_dates'] = missing_dates
 
     return data
