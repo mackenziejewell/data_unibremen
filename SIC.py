@@ -11,8 +11,13 @@ from .coordinates import open_coord_file, name_area_file, name_coordinate_file
 
 
 
-def extract_variables(ds):
-    """Extract variables from dataset."""
+def extract_variables(ds, res = '6250'):
+    """Extract variables from dataset. Works for 3125, 6250, 1000ma2
+
+Latest recorded update:
+02-13-2025
+    """
+
     data = {}
     data['proj'] = grab_projection(ds)
     data['ds'] = ds
@@ -20,7 +25,15 @@ def extract_variables(ds):
     data['x'] = ds.x.values * units(ds.x.units)
     data['y'] = ds.y.values * units(ds.y.units)
     data['xx'], data['yy'], = np.meshgrid(data['x'], data['y'])
-    data['sic'] = ds.z.values * units('%')
+
+    if str(res) == '1000ma2':
+        data['sic_merged'] = ds.sic_merged.values * units('%')
+        data['sic_modis'] = ds.sic_modis.values * units('%')
+        data['sic_amsr2'] = ds.sic_amsr2.values * units('%')
+        data['unc_sic_merged'] = ds.unc_sic_merged.values * units('%')
+
+    else:
+        data['sic'] = ds.z.values * units('%')
     
     return data
 
@@ -69,10 +82,14 @@ def name_SIC_file(date, res: str, hem: str, include_url: bool = True):
     """Construct filename for Uni Bremen AMSR2-AMSRE sea ice concentration data (doi: 10.1029/2005JC003384)
     INPUT: 
     - date: datetime object for desired file
-    - res: str, resolution of desired file ('3125, '6250', '12500', '25000')
+    - res: str, resolution of desired file ('3125, '6250', '12500', '25000', '1000MA2)
     - hem: str, hemisphere of desired file ('n', 's')
     - include_url: whether to include remote url in filename (True) or file name only (False)
+    
+    Latest recorded update:
+    02-13-2025
     """
+
     group = hem+res
 
     dataset_path = 'https://data.seaice.uni-bremen.de/'
@@ -83,6 +100,10 @@ def name_SIC_file(date, res: str, hem: str, include_url: bool = True):
         
     elif (date >= datetime(2002, 6, 1)) & (date <= datetime(2011, 10, 4)):  
         file_strftime = f'amsre/asi_daygrid_swath/{group}/netcdf/%Y/asi-n6250-%Y%m%d-v5.4.nc'
+
+    if str(res) == '1000ma2':
+        # NEED TO DOUBLE CHECK ONLINE PATH - WEBSITE CURRENTLY DOWN!
+        file_strftime = f'modis-amsr2/asi_daygrid_swath/nh/1000m/%Y/sic_modis-aqua_amsr2-gcom-w1_merged_{hem}h_1000m_%Y%m%d.nc'
 
     # construct filename
     if include_url:
@@ -202,8 +223,6 @@ Latest recorded update:
     return data
 
 
-
-
 def open_local_file(date, res = '6250', hem ='n', 
                     main_path = '/Volumes/Seagate_Jewell/KenzieStuff/',
                     crop = [0, None, 0, None],
@@ -225,7 +244,7 @@ def open_local_file(date, res = '6250', hem ='n',
 
 INPUT: 
 - date: datetime object for desired file
-- res: str, resolution of desired file ('6250' or '3125')
+- res: str, resolution of desired file ('6250' or '3125' or '1000ma2' (1km MODIS-AMSR2 product))
 - hem: str, hemisphere of desired file ('n' or 's')
 - main_path: str, directory where files are locally stored 
     - looks for subfolder named UniB-ASI-SIC-{}{} where {} will be replaced with res and hem
@@ -239,21 +258,27 @@ OUTPUT:
 - data: dictionary with nc data
 
 Latest recorded update:
-01-31-2025
+02-13-2025
     """
+
 
     # construct filename
     filename = name_SIC_file(date, res, hem, include_url = False)
 
     # construct path
     path = main_path + f'UniB-ASI-SIC-{hem}{res}/'
-
+    
     # determine platform for annual subfolder
     Y = date.year
     if Y <= 2011:
         annual_folder = f'asi-AMSRE-{hem}{res}-{Y}/'
     else:
         annual_folder = f'asi-AMSR2-{hem}{res}-{Y}/'
+
+    # 1 km product
+    if str(res) == '1000ma2':
+        path = main_path + f'UniB-ASI-modis-amsr2-SIC/' # 1km MODIS-AMSR2 product
+        annual_folder = f'{Y}/'
 
     # search for file
     file = path+annual_folder+filename
@@ -271,7 +296,7 @@ Latest recorded update:
     ds = xr.open_dataset(file)
         
     # Extract variables from dataset
-    data = extract_variables(ds)
+    data = extract_variables(ds, res=res)
 
     # crop data values here (and others below)
     ai, bi, aj, bj = crop[0], crop[1], crop[2], crop[3]
@@ -279,11 +304,24 @@ Latest recorded update:
     data['x'] = data['x'][aj:bj]
     data['xx'] = data['xx'][ai:bi, aj:bj]
     data['yy'] = data['yy'][ai:bi, aj:bj]
-    data['sic'] = data['sic'][ai:bi, aj:bj]
+
+    if str(res) == '1000ma2':
+        # (for some reason dimension 1 must be reversed to match x/y and lat/lon)
+        data['sic_merged'] = data['sic_merged'][::-1,:][ai:bi, aj:bj]
+        data['sic_modis'] = data['sic_modis'][::-1,:][ai:bi, aj:bj]
+        data['sic_amsr2'] = data['sic_amsr2'][::-1,:][ai:bi, aj:bj]
+        data['unc_sic_merged'] = data['unc_sic_merged'][::-1,:][ai:bi, aj:bj]
+    else:
+        data['sic'] = data['sic'][ai:bi, aj:bj]
 
 
     # download cell area file
     #------------------------------
+
+    #XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+    # LOOK FOR THIS WITH 1KM PRODUCT
+    #XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
     if area:
 
         # cell area file
@@ -312,6 +350,8 @@ Latest recorded update:
         else:
             # extract lon/lat from coordinate file
             lon, lat = open_coord_file(path+coord_file)
+            if str(res) == '1000ma2':
+                lon[lon<0]+=360
             data['lon'] = lon[ai:bi, aj:bj] * units('degreeE')
             data['lat'] = lat[ai:bi, aj:bj] * units('degreeN')
 
