@@ -368,7 +368,7 @@ Latest recorded update:
 
 
 def calc_meansic_openfreq(dates, crop = [0,None,0,None], open_thresh = 70,
-                  res = '6250', hem ='n', 
+                  res = '6250', hem ='n', sic_key = 'sic',
                   main_path = '/Volumes/Seagate_Jewell/KenzieStuff/',
                   coordinates = False, area = False, quiet=True):
     
@@ -382,6 +382,7 @@ INPUT:
 - open_thresh: threshold to indicate open water (default: 70%)
 - res: str, resolution of desired file ('6250' or '3125')
 - hem: str, hemisphere of desired file ('n' or 's')
+- sic_key: str, key for sic data in dictionary (default: 'sic', but needs to be adjusted for 1km product)
 - main_path: str, directory where files are locally stored 
     - looks for subfolder named UniB-ASI-SIC-{}{} where {} will be replaced with res and hem
 - coordinates: bool, whether or not to download lat/lon coordinate data
@@ -392,7 +393,7 @@ OUTPUT:
 - data: dictionary with coordinates (if desired), mean sic and open frequency across dates, and missing dates
 
 Latest recorded update:
-01-30-2025
+03-30-2025
     """
 
     # extract cropping info
@@ -427,9 +428,9 @@ Latest recorded update:
             
             # mean
             #-------------------------------------------------
-            sic_sum = np.zeros(sic['sic'][ai:aj, bi:bj].shape)
-            open_sum = np.zeros(sic['sic'][ai:aj, bi:bj].shape)
-            non_nan = np.zeros(sic['sic'][ai:aj, bi:bj].shape)
+            sic_sum = np.zeros(sic[sic_key][ai:aj, bi:bj].shape)
+            open_sum = np.zeros(sic[sic_key][ai:aj, bi:bj].shape)
+            non_nan = np.zeros(sic[sic_key][ai:aj, bi:bj].shape)
 
             # add coordinates or cell areas if desired
             data['xx'] = sic['xx'][ai:aj, bi:bj]
@@ -444,11 +445,20 @@ Latest recorded update:
             
         if exists:
 
-            sic_data = np.copy(sic['sic'][ai:aj, bi:bj])
+            sic_data = np.copy(sic[sic_key][ai:aj, bi:bj])
+            
+            # if sic_key != 'sic':
+            #     sic_data[sic_data>100] = np.nan
+                # print(np.sum(np.isnan(sic_data)))
 
             # record non-nan values, then replace nans with zeros
-            non_nan += np.isfinite(sic_data).astype(int)
-            sic_data[np.isnan(sic_data)] = 0
+            if sic_key == 'sic':
+                non_nan += np.isfinite(sic_data).astype(int)
+                sic_data[np.isnan(sic_data)] = 0
+            else:
+                non_nan += (sic_data <= 100).astype(int)
+                sic_data[sic_data>100] = 0
+                
             sic_sum += sic_data
             open_sum += (sic_data < open_thresh).astype(int)
 
