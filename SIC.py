@@ -367,7 +367,7 @@ Latest recorded update:
 
 
 
-def calc_meansic_openfreq(dates, crop = [0,None,0,None], open_thresh = 70,
+def calc_meansic_openfreq(dates, crop = [0,None,0,None], open_thresh = 70, nan_frac = 0.5,
                   res = '6250', hem ='n', sic_key = 'sic',
                   main_path = '/Volumes/Seagate_Jewell/KenzieStuff/',
                   coordinates = False, area = False, quiet=True):
@@ -380,6 +380,7 @@ INPUT:
 - crop: indices along dim1 ("a"), dim2 ("b") to crop to area of interest [ai, aj, bi, bj]
     default is no cropping
 - open_thresh: threshold to indicate open water (default: 70%)
+- nan_frac: maximum fraction of non-nan values to consider a valid mean (default: 0.5)
 - res: str, resolution of desired file ('6250' or '3125')
 - hem: str, hemisphere of desired file ('n' or 's')
 - sic_key: str, key for sic data in dictionary (default: 'sic', but needs to be adjusted for 1km product)
@@ -468,7 +469,9 @@ Latest recorded update:
 
                 print(f'[{counter}/{len(dates)}] {date}')
 
-    non_nan[non_nan == 0] = 9999
+
+    # flag anywhere that has too many nans
+    non_nan[non_nan < counter*(1-nan_frac)] = 9999
 
     sic_mean = sic_sum/non_nan
     open_freq = open_sum/non_nan
