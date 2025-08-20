@@ -1,4 +1,4 @@
-# data_UniBremen
+# data_unibremen
 Scripts for downloading, opening, read data files from the Universitat Bremen
 
 ### To build matching environment:
